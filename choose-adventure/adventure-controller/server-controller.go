@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -15,18 +16,18 @@ import (
 
 var currentArc *adventure_model.Arc
 var story *adventure_model.Story
-var errorPage bool
+var globalErr error
 
 // Defines the thread that runs the actual http server
 func RunServer(inStory *adventure_model.Story, workingSite http.Handler, errorSite http.Handler) {
 	story = inStory
 	currentArc = story.GetArcs()["intro"]
-	errorPage = false
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", redirectToPage)
+	globalErr = nil
 	mux.Handle("/story-page/", http.StripPrefix("/story-page/", workingSite))
 	mux.Handle("/error-page/", http.StripPrefix("/error-page/", errorSite))
-	mux.HandleFunc("/change-arc", changeArc)
+	mux.HandleFunc("/change-arc/", changeArc)
 	err := http.ListenAndServe(":3333", mux)
 	if err != nil {
 		panic(err)
@@ -34,8 +35,8 @@ func RunServer(inStory *adventure_model.Story, workingSite http.Handler, errorSi
 }
 
 func redirectToPage(w http.ResponseWriter, r *http.Request) {
-	if !errorPage {
-		r.URL.Path = "/story-page/base-page.html"
+	if globalErr == nil {
+		r.URL.Path = "/story-page/story-page.html"
 		fmt.Printf("Redirecting to %v", r.URL.String())
 		http.RedirectHandler(r.URL.String(), 301).ServeHTTP(w, r)
 	} else {
@@ -45,14 +46,18 @@ func redirectToPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func loadErrorTemplate(w http.ResponseWriter, r *http.Request) {
+	error_page.BuildErrorPage(globalErr)
+	templ, _ := template.ParseFiles("../adventure-view/error-page/error-page.html", "../adventure-view/error-page/error-page-template.html")
+	templ.ExecuteTemplate(w, "error-page", nil)
+}
+
 func changeArc(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Change Arc request recieved")
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		fmt.Printf("could not read body: %s\n", err)
 		writeErrorResponse(w, err)
-		error_page.BuildErrorPage(w, err)
-		errorPage = true
 		redirectToPage(w, r)
 		return
 	}
@@ -61,8 +66,6 @@ func changeArc(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Printf("Could not unmarshal json: %s\n", err)
 		writeErrorResponse(w, err)
-		error_page.BuildErrorPage(w, err)
-		errorPage = true
 		redirectToPage(w, r)
 		return
 	}
@@ -72,8 +75,6 @@ func changeArc(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Option Values are not strings")
 		err := errors.New(fmt.Sprintf("Option Text %v or Option Arc %v are not the correct type (String)", bodyJson["text"], bodyJson["title"]))
 		writeErrorResponse(w, err)
-		error_page.BuildErrorPage(w, err)
-		errorPage = true
 		redirectToPage(w, r)
 		return
 	}
@@ -82,8 +83,6 @@ func changeArc(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Printf("Error while getting next arc")
 		writeErrorResponse(w, err)
-		error_page.BuildErrorPage(w, err)
-		errorPage = true
 		redirectToPage(w, r)
 		return
 	}

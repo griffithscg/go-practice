@@ -12,5 +12,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	adventure_controller.RunServer(story, http.FileServer(http.Dir("./adventure-view/base-page")), http.FileServer(http.Dir("./adventure-view/error-page")))
+	adventure_controller.RunServer(story, http.FileServer(http.Dir("./adventure-view/story-page")), http.FileServer(http.Dir("./adventure-view/error-page")))
 }
